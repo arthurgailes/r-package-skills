@@ -16,4 +16,3 @@ docs
 *.db
 tests/skill-triggering/output/
 workspace
-lib/refresh/inputs/
