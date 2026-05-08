@@ -2,14 +2,14 @@
 
 ## R as MCP Server
 
-Allow external agents to access your R session:
+Allow external agents to access your R session. After registering the server with your agent (below), opt the current R session in:
 
 ```r
 library(mcptools)
-mcp_session()  # Run in console you want agents to access
+mcp_session()  # interactive console or .Rprofile, NOT batch scripts
 ```
 
-**Important:** Call each time R starts. Must be in interactive console, not scripts.
+Call each time R starts. The session must be interactive.
 
 ## Agent Configuration
 
@@ -34,29 +34,46 @@ Add to `claude_desktop_config.json`:
 }
 ```
 
-### VS Code (Continue)
+### VS Code (Copilot Chat / Continue) / Positron Assistant
 
-Add to Continue config:
-
-```json
-{
-  "mcpServers": {
-    "r-mcptools": {
-      "command": "Rscript",
-      "args": ["-e", "mcptools::mcp_server()"]
-    }
-  }
-}
-```
+Use the same command (`Rscript -e "mcptools::mcp_server()"`) in each client's MCP server settings.
 
 ## What Agents Can Do
 
-Once connected, agents can:
+Once connected with at least one `mcp_session()` active, agents can:
+
 - Execute R code in your session
-- Access objects in your environment
-- Call functions from loaded packages
-- Read/write files via R
-- Use any packages you have installed
+- Inspect and modify objects in your environment
+- Call functions from any loaded package
+- Read and write files via R
+- Use custom tools you provide via `mcp_server(tools = list(...))`
+- Switch between sessions using `list_r_sessions` / `select_r_session` MCP tools (when `session_tools = TRUE`, the default)
+
+## HTTP Transport (0.2.0+)
+
+For non-stdio setups:
+
+```r
+mcp_server(type = "http", host = "127.0.0.1", port = 8080)
+```
+
+The `MCPTOOLS_PORT` environment variable provides the default port. Bind to `127.0.0.1` unless you have explicit reason to expose the server.
+
+## Custom Tools
+
+```r
+library(ellmer)
+library(mcptools)
+
+custom_tool <- tool(
+  function(x) x^2,
+  name = "square",
+  description = "Square a number",
+  arguments = list(x = type_number())
+)
+
+mcp_server(tools = list(custom_tool))
+```
 
 ## R as MCP Client
 
@@ -66,38 +83,44 @@ Use external MCP servers as ellmer tools:
 library(mcptools)
 library(ellmer)
 
-# Get tools from external MCP server
+# Reads ~/.config/mcptools/config.json by default
 tools <- mcp_tools()
 
-# Register with chat
 chat <- chat_openai()
 chat$set_tools(tools)
 ```
 
+Override the config path via `options(.mcptools_config = "path/to/config.json")` or `mcp_tools(config = "path/to/config.json")`.
+
+The client is stdio-only; for HTTP-served MCP servers, configure `mcp-remote` as the command in your config.
+
 ## Combining with btw
 
-For agents to have btw tools available:
+mcptools previously bundled helpers that now live in btw. Two ways to combine them:
 
 ```r
-# Option 1: Use btw's MCP server directly
+# Option 1: Run btw's standalone MCP server (different command in agent config)
 btw::btw_mcp_server()
 
-# Option 2: Register btw tools in your session, then mcp_session()
+# Option 2: Load btw in your session, then mcp_session()
 library(btw)
 library(mcptools)
-mcp_session()  # Agent can now use btw via R execution
+mcp_session()  # agent runs R code that uses btw helpers
 ```
 
-## Session Discovery
+## Session Management
 
-```r
-# List available R sessions (for debugging)
-mcp_list_sessions()
-```
+| MCP tool (called by agent) | Purpose |
+|----------------------------|---------|
+| `list_r_sessions` | List sessions with active `mcp_session()` |
+| `select_r_session` | Switch which session subsequent tool calls run in |
+
+Toggle with `session_tools = TRUE/FALSE` in `mcp_server()`. There is no R-callable `mcp_list_sessions()` function.
 
 ## Security Notes
 
 - Agents can execute arbitrary R code in your session
-- They have access to your environment variables
-- They can read/write files your R process can access
-- Use in trusted environments only
+- They have access to your environment variables and any secrets the R process can read
+- They can read and write files the R process can access
+- Use only in trusted environments
+- For HTTP transport, keep `host = "127.0.0.1"` unless you know what you are doing

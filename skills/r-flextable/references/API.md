@@ -26,7 +26,11 @@ qflextable(iris)
 | Function | Purpose |
 |----------|---------|
 | `tabulator()` | Create pivot-style summary tables |
+| `summary(<tabulator>)` | Summary method for tabulator objects |
+| `tabulator_colnames()` | Get column keys of tabulator objects |
+| `as_flextable(<tabulator>)` | Transform tabulator object into flextable |
 | `summarizor()` | Prepare descriptive statistics for display |
+| `as_flextable(<summarizor>)` | Transform summarizor object into flextable |
 | `as_flextable(<compact_summary>)` | Transform compact summary objects |
 | `as_flextable(<data.frame>)` | Transform and summarize data frames |
 | `as_flextable(<gam>)` | Convert generalized additive models |
@@ -38,10 +42,12 @@ qflextable(iris)
 | `as_flextable(<merMod>)` | Convert mixed-effects models (merMod, lme, gls, nlme, brmsfit, glmmTMB, glmmadmb) |
 | `as_flextable(<pam>)` | Transform partitioning around medoids results |
 | `as_flextable(<table>)` | Transform table objects |
+| `as_flextable(<tabular>)` | Transform tables::tabular object |
+| `as_flextable(<xtable>)` | Transform xtable object into flextable |
 | `continuous_summary()` | Summarize continuous variables |
 | `compact_summary()` | Create compact dataset summaries |
 | `as_grouped_data()` | Insert group-label rows into data frames |
-| `proc_freq()` | Generate frequency tables |
+| `proc_freq()` | Generate frequency tables (gained `count_format_fun` arg in 0.9.9) |
 | `shift_table()` | Create shift tables |
 
 **Example:**
@@ -130,7 +136,7 @@ ft |>
 | `as_paragraph()` | Build paragraphs from chunks |
 | `append_chunks()` | Add chunks to existing content |
 | `prepend_chunks()` | Add chunks before existing content |
-| `footnote()` | Add footnotes to table |
+| `footnote()` | Add footnotes to table (gained `symbol_sep` arg in 0.9.11 for separating multiple footnote symbols in a cell) |
 
 **Example:**
 ```r
@@ -284,7 +290,7 @@ ft |>
 | `width()` | Set column widths manually |
 | `autofit()` | Automatically adjust cell widths and heights |
 | `fit_to_width()` | Fit table to maximum width |
-| `set_table_properties()` | Set table layout and width properties |
+| `set_table_properties()` | Set table layout and width properties; pass `opts_word = list(repeat_headers = FALSE)` (added in 0.9.10) to stop header repetition across Word pages |
 
 **Example:**
 ```r
@@ -400,6 +406,8 @@ read_docx() |>
 | `wrap_flextable()` | Wrap for use with patchwork |
 | `plot(<flextable>)` | Plot flextable |
 | `gen_grob()` | Render as graphic object |
+| `plot(<flextableGrob>)` | Plot a flextable grob |
+| `dim(<flextableGrob>)` | Get optimal width and height of grob |
 
 **Example:**
 ```r
@@ -448,9 +456,21 @@ set_flextable_defaults(
 # Format as percentage
 fmt_pct(0.156, digits = 1) # "15.6%"
 
-# Mean ± SD
-fmt_avg_dev(5.2, 1.3, digits = 1) # "5.2 ± 1.3"
+# Mean and SD
+fmt_avg_dev(5.2, 1.3, digits = 1) # "5.2 +/- 1.3"
 ```
+
+## Defunct Functions
+
+These previously deprecated functions were made defunct in flextable 0.9.9 -- calling them errors:
+
+| Function | Replacement |
+|----------|-------------|
+| `as_raster()` | Use `gen_grob()` or `save_as_image()` |
+| `lollipop()` | Use `linerange()` or `minibar()` |
+| `set_formatter_type()` | Use `colformat_double()` / `colformat_int()` / `set_formatter()` |
+
+Also: empty footnote ref symbol `''` is forbidden; use `add_footer_lines()` instead.
 
 ## Documentation
 

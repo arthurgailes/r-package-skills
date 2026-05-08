@@ -67,30 +67,38 @@ read_parquet_duckdb("file.parquet", prudence = "stingy")
 
 ## Quick Reference
 
-| Task                  | Function                                         |
-| --------------------- | ------------------------------------------------ |
-| Read Parquet          | `read_parquet_duckdb(path, prudence = "stingy")` |
-| Read CSV/JSON         | `read_csv_duckdb()`, `read_json_duckdb()`        |
-| Multiple files        | `read_parquet_duckdb("data_*.parquet")` (globs)  |
-| Convert data frame    | `as_duckdb_tibble(df)`                           |
-| Bring to R            | `collect()` (materializes in R memory)           |
-| Cache in DuckDB       | `compute()` (temp table)                         |
-| Write file            | `compute_parquet()`, `compute_csv()`             |
-| Remote data (HTTP/S3) | `db_exec("INSTALL httpfs")`, then use URLs       |
-| Query plan            | `explain(df \|> filter(...))`                    |
-| Memory limit          | `db_exec("PRAGMA memory_limit = '4GB'")`         |
+| Task                       | Function                                                       |
+| -------------------------- | -------------------------------------------------------------- |
+| Read Parquet               | `read_parquet_duckdb(path, prudence = "stingy")`               |
+| Read CSV/JSON              | `read_csv_duckdb()`, `read_json_duckdb()`                      |
+| Multiple files             | `read_parquet_duckdb("data_*.parquet")` (globs)                |
+| Read DuckDB table          | `read_tbl_duckdb(path, table_name, schema = "main")`           |
+| Convert data frame         | `as_duckdb_tibble(df)`                                         |
+| Bring to R                 | `collect()` (materializes in R memory)                         |
+| Cache in DuckDB            | `compute()` (temp table)                                       |
+| Write Parquet with options | `compute_parquet(df, "out.parquet", options = list(compression = "zstd"))` |
+| Write CSV with options     | `compute_csv(df, "out.csv", options = list(delimiter = ";"))`  |
+| Call DuckDB function       | `mutate(x = dd$UPPER(name))` (1.1.0+, skips fallback)          |
+| SQL escape hatch           | `as_tbl(df) \|> mutate(... sql("...")) \|> as_duckdb_tibble()` |
+| Remote data (HTTP/S3)      | `db_exec("INSTALL httpfs")`, then use URLs                     |
+| Query plan                 | `explain(df \|> filter(...))`                                  |
+| Memory limit               | `db_exec("PRAGMA memory_limit = '4GB'")`                       |
+| Track fallbacks            | `fallback_sitrep()`, `fallback_review()`                       |
 
 ## Common Mistakes
 
-| Mistake                | Fix                                       |
-| ---------------------- | ----------------------------------------- |
-| `as_duck_frame()`      | Use `as_duckdb_tibble()`                  |
-| Early `collect()`      | Keep lazy until end                       |
-| No prudence setting    | Set `prudence = "stingy"` for large files |
-| Expecting auto-sort    | Use explicit `arrange()`                  |
-| arrow/readr instead    | Use `read_*_duckdb()` functions           |
-| Missing httpfs         | `db_exec("INSTALL httpfs")` for URLs      |
-| No `compute()` caching | Cache expensive intermediates             |
+| Mistake                          | Fix                                                            |
+| -------------------------------- | -------------------------------------------------------------- |
+| `as_duck_frame()`                | Use `as_duckdb_tibble()`                                       |
+| `as_duckplyr_tibble/df()`        | Deprecated since 1.0.0 - use `as_duckdb_tibble()`              |
+| Early `collect()`                | Keep lazy until end                                            |
+| No prudence setting              | Set `prudence = "stingy"` for large files                      |
+| Expecting auto-sort              | Use explicit `arrange()`                                       |
+| arrow/readr instead              | Use `read_*_duckdb()` functions                                |
+| Missing httpfs                   | `db_exec("INSTALL httpfs")` for URLs                           |
+| No `compute()` caching           | Cache expensive intermediates                                  |
+| Triggering fallback unnecessarily| Use `dd$FUNC()` to call DuckDB functions directly (1.1.0+)     |
+| Need raw SQL                     | Use `as_tbl()` to drop into dbplyr, then `as_duckdb_tibble()`  |
 
 ## When NOT to Use
 

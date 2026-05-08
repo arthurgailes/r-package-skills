@@ -24,7 +24,7 @@ freestile_query(
   streaming = "always",  # For large datasets
   min_zoom = 4,
   max_zoom = 12,
-  tile_format = "mlt"  # Smaller files
+  tile_format = "mlt"  # Optional: opt in to smaller polygon/line files (default is "mvt")
 )
 
 # 3. Serve locally for development
@@ -51,12 +51,14 @@ maplibre(style = carto_style("positron")) |>
 ## Multi-Layer Tilesets
 
 ```r
-# Combine multiple datasets with different zoom ranges
+# Combine multiple datasets with different zoom ranges.
+# Layer names come from the named-list keys; freestile_layer()
+# only accepts (input, min_zoom, max_zoom) - no name argument.
 freestile(
   input = list(
-    freestile_layer(states, "states", min_zoom = 0, max_zoom = 6),
-    freestile_layer(counties, "counties", min_zoom = 4, max_zoom = 10),
-    freestile_layer(blocks, "blocks", min_zoom = 8, max_zoom = 14)
+    states   = freestile_layer(states,   min_zoom = 0, max_zoom = 6),
+    counties = freestile_layer(counties, min_zoom = 4, max_zoom = 10),
+    blocks   = freestile_layer(blocks,   min_zoom = 8, max_zoom = 14)
   ),
   output = "multilayer.pmtiles"
 )

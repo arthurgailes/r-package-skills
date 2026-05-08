@@ -122,6 +122,7 @@ read_tbl_duckdb(
   path,
   table_name,
   ...,
+  schema = "main",
   prudence = c("thrifty", "lavish", "stingy")
 )
 ```
@@ -130,6 +131,7 @@ read_tbl_duckdb(
 - `path`: Path to DuckDB database file
 - `table_name`: Name of table to read
 - `...`: Reserved
+- `schema`: Schema containing the table (default: `"main"`)
 - `prudence`: Memory protection level
 
 **Returns:** `duckplyr_df`
@@ -189,29 +191,59 @@ compute(x, ..., prudence = c("thrifty", "lavish", "stingy"))
 **Compute results to Parquet file**
 
 ```r
-compute_parquet(x, path, ...)
+compute_parquet(x, path, ..., prudence = NULL, options = NULL)
 ```
 
 **Parameters:**
-- `x`: duckplyr_df object
+- `x`: duckplyr_df object (S3 generic also dispatches on `data.frame`)
 - `path`: Output file path
-- `...`: Additional arguments
+- `prudence`: Override memory protection for this operation (default inherits from input)
+- `options`: Named list of Parquet writer options forwarded to DuckDB's `COPY ... (FORMAT PARQUET, ...)`. Examples: `list(compression = "zstd", row_group_size = 100000L)`
+- `...`: Reserved for future use
 
 **Returns:** `duckplyr_df` pointing to the file
+
+**Note:** Since 1.2.0, `compute_parquet()` is an S3 generic and accepts the `options` argument for format-specific writer settings.
 
 ### `compute_csv()`
 **Compute results to CSV file**
 
 ```r
-compute_csv(x, path, ...)
+compute_csv(x, path, ..., prudence = NULL, options = NULL)
 ```
 
 **Parameters:**
-- `x`: duckplyr_df object
+- `x`: duckplyr_df object (S3 generic also dispatches on `data.frame`)
 - `path`: Output file path
-- `...`: Additional arguments
+- `prudence`: Override memory protection for this operation
+- `options`: Named list of CSV writer options forwarded to DuckDB's `COPY ... (FORMAT CSV, ...)`. Examples: `list(delimiter = ";", header = TRUE, quote = "\"")`
+- `...`: Reserved for future use
 
 **Returns:** `duckplyr_df` pointing to the file
+
+**Note:** Since 1.2.0, `compute_csv()` is an S3 generic and accepts the `options` argument.
+
+### `as_tbl()` (experimental)
+**Convert duckplyr frame to dbplyr table for SQL escape hatch**
+
+```r
+as_tbl(.data)
+```
+
+**Parameters:**
+- `.data`: A duckplyr_df or data frame
+
+**Returns:** A dbplyr `tbl_lazy` connected to duckplyr's internal DuckDB connection.
+
+**Use case:** Drop down to dbplyr / hand-written SQL for operations duckplyr does not translate, then convert back with `as_duckdb_tibble()`.
+
+```r
+df <- duckdb_tibble(a = 1L)
+df |>
+  as_tbl() |>
+  dplyr::mutate(b = dbplyr::sql("a + 1")) |>
+  as_duckdb_tibble()
+```
 
 ### `explain()`
 **Explain query execution plan**
@@ -258,7 +290,7 @@ filter(.data, ..., .by = NULL)
 
 **Returns:** `duckplyr_df` (filtered)
 
-### `filter_out()`
+### `filter_out()` (experimental)
 **Remove rows matching condition**
 
 ```r
@@ -268,6 +300,8 @@ filter_out(.data, ..., .by = NULL)
 **Parameters:** Same as `filter()`
 
 **Returns:** `duckplyr_df` (inverse filter)
+
+**Note:** Marked experimental as of 1.2.0.
 
 ### `distinct()`
 **Keep unique rows**
@@ -401,7 +435,7 @@ transmute(.data, ...)
 
 **Returns:** `duckplyr_df` (only new columns)
 
-**Note:** Superseded by `mutate(.keep = "none")`
+**Note:** Superseded by `mutate(.keep = "none")`. Since 1.2.0, expressions can reference newly created variables defined earlier in the same call (matching dplyr 1.2.0 behavior).
 
 ## Grouping & Summarization
 
@@ -551,6 +585,22 @@ fallback_review()
 
 **Returns:** Information about when duckplyr fell back to dplyr
 
+### `fallback_upload()`
+**Upload fallback log to telemetry endpoint (opt-in)**
+
+```r
+fallback_upload()
+```
+
+**Effect:** Sends collected fallback details upstream for the duckplyr team to triage missing translations. Opt-in only.
+
+### `fallback_purge()`
+**Delete locally collected fallback log entries**
+
+```r
+fallback_purge()
+```
+
 ### `config`
 **Configuration options**
 
@@ -564,6 +614,24 @@ stats_show()
 ```
 
 **Returns:** Performance statistics for DuckDB operations
+
+### `last_rel()`
+**Retrieve recent computation details**
+
+```r
+last_rel()
+```
+
+**Returns:** The most recent DuckDB relation built by duckplyr. Useful for debugging - inspect what relation tree was constructed before materialization.
+
+### `flights_df()`
+**Sample dataset (NYC flights)**
+
+```r
+flights_df()
+```
+
+**Returns:** Flights data frame used in duckplyr examples and vignettes.
 
 ## Database Utilities
 
@@ -585,6 +653,27 @@ db_exec(sql)
 - Set memory limit: `db_exec("PRAGMA memory_limit = '1GB'")`
 - Configure settings: `db_exec("PRAGMA threads = 4")`
 
+## DuckDB Function Passthrough (`dd$`)
+
+Since 1.1.0, prefix any DuckDB scalar/aggregate function with `dd$` inside `mutate()`, `filter()`, `summarise()`, etc. to call it directly without waiting for a duckplyr translation. This bypasses the translation layer and avoids fallback to dplyr.
+
+```r
+df |>
+  mutate(
+    row_id   = dd$ROW_NUMBER(),
+    upper    = dd$UPPER(name),
+    md5_hash = dd$MD5(name)
+  ) |>
+  filter(dd$REGEXP_MATCHES(name, "^A"))
+```
+
+**Use cases:**
+- Access DuckDB-only functions (regex, JSON, list, struct, geo) before duckplyr translates them
+- Avoid the fallback-to-dplyr penalty for unsupported functions
+- Call any DuckDB function listed in the DuckDB SQL function reference
+
+**Note:** Names after `dd$` are passed through verbatim - they are not R names. Function call syntax must be valid (R parses `dd$ROW_NUMBER()` as `(dd$ROW_NUMBER)()`).
+
 ## Key Concepts
 
 ### Prudence Levels
@@ -592,7 +681,7 @@ db_exec(sql)
 Control automatic materialization of intermediate results:
 
 - **"lavish"**: No protection - converts regardless of size (may OOM)
-- **"thrifty"** (default): Converts only if ≤ 1 million cells
+- **"thrifty"** (default): Converts only if <= 1 million cells
 - **"stingy"**: Never converts intermediate results automatically
 
 Can override per-operation: `compute(df, prudence = "lavish")`

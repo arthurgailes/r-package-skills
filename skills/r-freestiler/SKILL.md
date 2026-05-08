@@ -18,6 +18,8 @@ Read `references/API.md` before writing code.
 - `references/zoom-strategy.md` - Zoom level guidance by geometry type
 - `references/workflows.md` - Complete workflows and integration patterns
 - `references/mapping.md` - Visualization and server configuration
+- `references/maplibre-tiles.md` - MLT vs MVT tradeoffs (when to switch formats)
+- `references/python.md` - Cross-language tips (PMTiles serving, format choice)
 
 ## When to Use
 
@@ -86,7 +88,7 @@ maplibre() |>
 3. **CRS must be WGS84:** Use `st_transform(4326)` before tiling
 4. **Large sf objects:** Use `freestile_file()` or `freestile_query()` to avoid loading into memory
 5. **Massive points (10M+):** Add `streaming = "always"` to `freestile_query()`
-6. **Tile format:** MLT (default, smaller files) vs MVT (broader compatibility, use for Python)
+6. **Tile format:** MVT is the default (broadest compatibility). Pass `tile_format = "mlt"` for smaller polygon/line files when targeting MapLibre GL JS 5.21+ or mapgl. Do not assume MLT is the default.
 7. **Large tilesets (>500MB):** `serve_tiles()` struggles with byte-range requests; launch `npx http-server` from R via `processx::process$new()` instead. See `references/mapping.md` "Serving Large Tilesets" for a ready-made helper function.
 
 ## When NOT to Use

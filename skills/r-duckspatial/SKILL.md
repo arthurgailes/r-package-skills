@@ -7,9 +7,9 @@ description: Use when code loads or uses duckspatial (library(duckspatial), duck
 
 ## Overview
 
-**duckspatial** bridges R's sf ecosystem with DuckDB's spatial extension for memory-efficient analysis of large spatial datasets. Data stays in DuckDB until explicitly collected, enabling operations on datasets larger than RAM.
+**duckspatial** bridges R's sf ecosystem with DuckDB's spatial extension for memory-efficient analysis of large spatial datasets. The primary class is `duckspatial_df`: a lazy, table-like object that materializes into R memory on demand.
 
-**Core principle:** Lazy evaluation keeps data outside R memory. Operations execute in DuckDB's query engine with optimization before results return.
+**Core principle:** Operations execute in DuckDB and stay outside R memory until you call `ddbs_collect()`. As of v1.0.0, you do NOT need to manage a DuckDB connection explicitly for the typical workflow - duckspatial uses a temporary database by default.
 
 ## References
 
@@ -20,7 +20,7 @@ Read `references/API.md` before writing code.
 ## When to Use
 
 - Dataset too large for sf to load into memory
-- Spatial joins with millions of features
+- Spatial joins / filters with millions of features
 - Areal-weighted interpolation across large geographies
 - Repeated spatial operations benefit from DuckDB's query optimization
 - Working with spatial files larger than 1GB
@@ -30,23 +30,28 @@ Read `references/API.md` before writing code.
 - Small datasets (<100K features) - sf is simpler
 - Complex spatial topology operations not in DuckDB spatial extension
 - Need GEOS-specific functionality (sf provides more geometry operations)
-- Interactive spatial visualization - materialize with `collect()` first
+- Interactive spatial visualization - materialize with `ddbs_collect()` first
 
 ## Quick Reference
 
-| Operation                 | Function                                | Key Parameters             |
-| ------------------------- | --------------------------------------- | -------------------------- |
-| **Load file**             | `ddbs_open_dataset(path)`               | Returns lazy duckspatial_df|
-| **Convert from sf**       | `as_duckspatial_df(sf_obj)`             | Registers sf as lazy table |
-| **Materialize**           | `ddbs_collect()` or `st_as_sf()`        | Brings data into R memory  |
-| **Spatial join**          | `ddbs_join(x, y, join, predicate)`      | join: left/inner/right/full|
-| **Spatial filter**        | `ddbs_filter(x, y, predicate)`          | Subset by spatial relation |
-| **Crop to extent**        | `ddbs_crop(x, y)`                       | Clip geometries to y extent|
-| **Areal interpolation**   | `ddbs_interpolate_aw(x, y, values)`     | Weight by overlap area     |
-| **Buffer**                | `ddbs_buffer(x, distance)`              | Distance in CRS units      |
-| **Union/dissolve**        | `ddbs_union(x)`                         | Merge into single geometry |
-| **Transform CRS**         | `ddbs_transform(x, crs)`                | EPSG code or proj4string   |
-| **Validate**              | `ddbs_make_valid(x)`                    | Fix invalid geometries     |
+| Operation                 | Function                                           | Key Parameters                      |
+| ------------------------- | -------------------------------------------------- | ----------------------------------- |
+| **Load file**             | `ddbs_open_dataset(path)`                          | Returns lazy duckspatial_df         |
+| **Convert from sf**       | `as_duckspatial_df(sf_obj)`                        | Registers sf as lazy table          |
+| **Materialize**           | `ddbs_collect(x, as = "sf")`                       | as: "sf" (default), "tibble", "raw", "geoarrow" |
+| **Drop geometry**         | `ddbs_drop_geometry(x)`                            | Returns lazy tibble                 |
+| **Spatial join**          | `ddbs_join(x, y, join = "intersects")`             | `join` is the SPATIAL predicate     |
+| **Attribute join**        | `left_join(x, y, by = ...)`                        | Use dplyr verbs for non-spatial joins |
+| **Spatial filter**        | `ddbs_filter(x, y, predicate = "intersects")`      | Subset by spatial relation          |
+| **Crop to extent**        | `ddbs_crop(x, y)`                                  | Clip geometries to y bbox           |
+| **Areal interpolation**   | `ddbs_interpolate_aw(target, source, tid, sid, ...)` | extensive / intensive variables   |
+| **Buffer**                | `ddbs_buffer(x, distance)`                         | + cap_style, join_style, etc.       |
+| **Union (per-row)**       | `ddbs_union(x, y)`                                 | Pairwise union                      |
+| **Dissolve (aggregate)**  | `ddbs_union_agg(x)`                                | Single multipolygon                 |
+| **Simplify**              | `ddbs_simplify(x, tolerance = 0)`                  | + preserve_topology = FALSE         |
+| **Transform CRS**         | `ddbs_transform(x, crs)`                           | EPSG code                           |
+| **Set CRS (no reproject)**| `ddbs_set_crs(x, crs)`                             | Tag without transforming            |
+| **Validate**              | `ddbs_make_valid(x)`                               | Fix invalid geometries              |
 
 **See `references/API.md` for complete function reference.**
 
@@ -54,6 +59,8 @@ Read `references/API.md` before writing code.
 
 ```r
 library(duckspatial)
+library(dplyr)
+library(sf)
 
 # Load large dataset as lazy table (not in R memory)
 buildings <- ddbs_open_dataset("buildings.gpkg")
@@ -61,16 +68,14 @@ buildings <- ddbs_open_dataset("buildings.gpkg")
 # Or convert existing sf object
 neighborhoods <- as_duckspatial_df(sf_neighborhoods)
 
-# Chain operations - all happen in DuckDB
+# Chain operations - all execute lazily in DuckDB
 result <- buildings |>
-  ddbs_make_valid() |>                    # Fix geometries
-  ddbs_transform(crs = 32633) |>          # Reproject to UTM
-  ddbs_join(neighborhoods,
-            join = "left",
-            predicate = "within") |>       # Spatial join
-  ddbs_collect()                           # NOW bring into R memory
+  ddbs_make_valid() |>
+  ddbs_transform(crs = 32633) |>
+  ddbs_join(neighborhoods, join = "intersects") |>
+  ddbs_collect()                              # NOW pull into R as sf
 
-# Result is sf object, ready for plotting/further analysis
+# Result is sf, ready for plotting / further analysis
 plot(result["neighborhood_name"])
 ```
 
@@ -78,36 +83,41 @@ plot(result["neighborhood_name"])
 
 ### Spatial Join (Point-in-Polygon)
 
-```r
-# Points to polygons - find which polygon each point falls in
-points <- ddbs_open_dataset("locations.geojson")
-zones <- as_duckspatial_df(zone_boundaries)
+`ddbs_join()`'s `join` argument is the **spatial predicate**, not a SQL join type. For each point, attributes from any polygon satisfying the predicate are appended.
 
-joined <- ddbs_join(points, zones,
-                    join = "left",
-                    predicate = "within") |>
+```r
+points <- ddbs_open_dataset("locations.geojson")
+zones  <- as_duckspatial_df(zone_boundaries)
+
+joined <- ddbs_join(points, zones, join = "within") |>
   ddbs_collect()
 ```
 
+For non-spatial joins on attribute columns, use dplyr verbs (`left_join()`, `inner_join()`, etc.) directly on the lazy duckspatial_df.
+
 ### Areal-Weighted Interpolation
 
+The signature uses `target` and `source` (target receives the values), with `tid` / `sid` as ID columns and explicit `extensive` (counts that sum, e.g. population) vs `intensive` (rates that average, e.g. density) arguments.
+
 ```r
-# Transfer population from census tracts to neighborhoods
 census <- ddbs_open_dataset("census_tracts.gpkg")
 neighborhoods <- as_duckspatial_df(neighborhoods_sf)
 
 interpolated <- ddbs_interpolate_aw(
-  census,
-  neighborhoods,
-  values = "population"  # Extensive variable (sums)
+  target    = neighborhoods,
+  source    = census,
+  tid       = "neighborhood_id",
+  sid       = "tract_id",
+  extensive = "population",       # sums proportionally to overlap
+  intensive = "median_income"     # averages weighted by area
 ) |>
   ddbs_collect()
 ```
 
-### Large File Processing
+### Large File Filtering
 
 ```r
-# Process multi-GB shapefile without loading entirely
+# Filter in DuckDB before pulling anything into R
 parcels <- ddbs_open_dataset("parcels_nationwide.shp")
 
 city_parcels <- parcels |>
@@ -117,31 +127,45 @@ city_parcels <- parcels |>
   ddbs_collect()
 ```
 
-## Integration with sf and dplyr
+### Mixing dplyr verbs and spatial ops
+
+duckspatial v1.0.0 implements DuckDB macros so duckspatial functions can be used inside dplyr verbs. Operations stay lazy until `ddbs_collect()`.
 
 ```r
-# duckspatial_df supports dplyr verbs
 filtered <- buildings |>
-  filter(height > 50) |>           # dplyr filter (attribute)
-  mutate(area = ddbs_area(.)) |>   # Add geometry measurement
-  ddbs_filter(downtown,            # Spatial filter
-              predicate = "within")
+  filter(height > 50) |>                       # dplyr (attribute)
+  mutate(area_m2 = ddbs_area(geom)) |>         # ddbs_* inside mutate
+  ddbs_filter(downtown, predicate = "within")  # spatial filter
 
-# Support standard sf methods
+# sf accessors also work on lazy duckspatial_df
 crs_info <- st_crs(buildings)
-bbox <- st_bbox(buildings)
-geom_col <- st_geometry(buildings)
+bbox     <- st_bbox(buildings)
 ```
+
+## Output Formats from `ddbs_collect()`
+
+```r
+ddbs_collect(x, as = "sf")        # default: sf object
+ddbs_collect(x, as = "tibble")    # fastest: tibble, geometry dropped
+ddbs_collect(x, as = "raw")       # tibble with WKB raw bytes
+ddbs_collect(x, as = "geoarrow")  # tibble with geoarrow_vctr column
+```
+
+Use `"tibble"` when you only need attributes (faster than dropping geometry afterwards). Use `"geoarrow"` for zero-copy handoff to Arrow-based tooling.
 
 ## Common Mistakes
 
-| Mistake                        | Fix                                              |
-| ------------------------------ | ------------------------------------------------ |
-| Forgetting `ddbs_collect()`    | Data stays in DuckDB - call `collect()` to get sf|
-| Not validating before union    | Always `ddbs_make_valid()` before `ddbs_union()` |
-| Wrong CRS for measurements     | Transform to projected CRS before distance/area  |
-| Mixing sf and duckspatial ops  | Convert with `as_duckspatial_df()` or `collect()`|
-| Large dataset in `collect()`   | Filter/aggregate in DuckDB first, then collect   |
+| Mistake                                              | Fix                                                          |
+| ---------------------------------------------------- | ------------------------------------------------------------ |
+| Using `join = "left"` in `ddbs_join()`               | `join` is the **spatial predicate** ("intersects", "within"). For SQL joins use dplyr `left_join()` |
+| Passing `predicate=` to `ddbs_join()`                | `ddbs_join()` has no `predicate` arg; its `join` IS the predicate. `predicate` exists on `ddbs_filter()` and `ddbs_predicate()` |
+| Calling `ddbs_interpolate_aw(x, y, values = ...)`    | Use `target`, `source`, `tid`, `sid`, `extensive`, `intensive` |
+| Forgetting `ddbs_collect()`                          | Data stays lazy in DuckDB - call `ddbs_collect()` to get sf  |
+| Using `ddbs_union()` to dissolve                     | `ddbs_union()` is pairwise; use `ddbs_union_agg()` for dissolve |
+| Not validating before union/dissolve                 | Always `ddbs_make_valid()` first                             |
+| Wrong CRS for measurements                           | Transform to projected CRS before distance/area              |
+| Calling `ddbs_simplify(x)` without tolerance         | Default `tolerance = 0` is a no-op; pass a real tolerance    |
+| Manually creating a connection for simple workflows  | v1.0.0+ uses a temp DB by default; skip `ddbs_create_conn()` unless persisting |
 
 ## Performance Characteristics
 
@@ -153,8 +177,8 @@ geom_col <- st_geometry(buildings)
 
 **When sf is faster:**
 - Small datasets (<100K features)
-- Operations requiring immediate results
 - Complex GEOS operations not in DuckDB spatial extension
+- One-shot operations where lazy setup overhead dominates
 
 **Memory pattern:**
 ```r
@@ -171,28 +195,33 @@ data <- ddbs_open_dataset("huge_file.gpkg") |>
 ## Gotchas
 
 1. **First call overhead:** Initial `ddbs_open_dataset()` takes seconds for connection setup
-2. **Lazy evaluation:** Operations don't execute until `collect()` - errors appear late
-3. **Geometry validity:** Invalid geometries cause cryptic DuckDB errors - validate early
-4. **CRS handling:** DuckDB spatial extension uses EPSG codes - proj4 strings may not work
-5. **Non-persistent:** In-memory DuckDB discards data after session unless using file-backed connection
+2. **Lazy evaluation:** Operations don't execute until `ddbs_collect()` - errors appear late
+3. **Geometry validity:** Invalid geometries cause cryptic DuckDB errors - validate early with `ddbs_make_valid()`
+4. **CRS handling:** DuckDB spatial extension uses EPSG codes; proj4 strings may not work
+5. **Non-persistent:** The default temp DuckDB discards data after session - pass `conn` (from `ddbs_create_conn(dbdir = "...")`) to persist
+6. **`ddbs_join` predicate naming:** Argument is `join`, not `predicate` - this is the most common bug
 
 ## Spatial Predicates Reference
 
-| Predicate      | Meaning                                    | Use Case                    |
-| -------------- | ------------------------------------------ | --------------------------- |
-| `intersects`   | Geometries share any space                 | Most permissive, default    |
-| `within`       | x completely inside y                      | Points in polygons          |
-| `contains`     | x completely contains y                    | Find polygons containing pt |
-| `covers`       | x covers y (boundary can touch)            | Relaxed containment         |
-| `touches`      | Share boundary but not interior            | Adjacent polygons           |
-| `overlaps`     | Share space but neither contains other     | Partial overlap             |
-| `crosses`      | Geometries cross (lines)                   | Line intersections          |
-| `equals`       | Spatially identical                        | Exact match                 |
-| `disjoint`     | No spatial interaction                     | Exclusion filtering         |
+| Predicate            | Meaning                                    | Use Case                    |
+| -------------------- | ------------------------------------------ | --------------------------- |
+| `intersects`         | Geometries share any space                 | Most permissive, default    |
+| `within`             | x completely inside y                      | Points in polygons          |
+| `contains`           | x completely contains y                    | Find polygons containing pt |
+| `contains_properly`  | x contains y in interior only              | Strict containment          |
+| `within_properly`    | x within y in interior only                | Strict within               |
+| `covers`             | x covers y (boundary can touch)            | Relaxed containment         |
+| `covered_by`         | x is covered by y                          | Reverse of covers           |
+| `touches`            | Share boundary but not interior            | Adjacent polygons           |
+| `overlaps`           | Share space, neither contains other        | Partial overlap             |
+| `crosses`            | Geometries cross (lines)                   | Line intersections          |
+| `equals`             | Spatially identical                        | Exact match                 |
+| `disjoint`           | No spatial interaction                     | Exclusion filtering         |
+| `intersects_extent`  | Bounding boxes intersect                   | Fast prefilter              |
 
 ## Real-World Impact
 
 **Before (sf):** 45 minutes to spatial join 2M buildings to 500 neighborhoods, 32GB RAM
 **After (duckspatial):** 3 minutes, 4GB RAM
 
-**Pattern:** Operations scale sub-linearly with data size due to DuckDB's columnar storage and parallel execution.
+Operations scale sub-linearly with data size due to DuckDB's columnar storage and parallel execution.

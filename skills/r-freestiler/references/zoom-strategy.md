@@ -26,18 +26,19 @@ freestile(input = points, output = "points.pmtiles", layer_name = "points",
           min_zoom = 0, max_zoom = 14)
 ```
 
-## Tile Format: MLT vs MVT
+## Tile Format: MVT vs MLT
 
-**Default: MapLibre Tiles (MLT)**
-- Columnar encoding
-- Smaller files for polygons/lines
-- Requires MapLibre GL viewer
+**Default: Mapbox Vector Tiles (MVT)**
+- Row-based protobuf encoding
+- Broadest viewer compatibility (MapLibre GL JS, Mapbox GL JS 3.21+, deck.gl, Folium, etc.)
+- Use unless you have a specific reason to opt out
 
-**Alternative: Mapbox Vector Tiles (MVT)**
+**Alternative: MapLibre Tiles (MLT)**
 ```r
 freestile(input = data, output = "output.pmtiles", layer_name = "layer",
-          tile_format = "mvt")
+          tile_format = "mlt")
 ```
-- Broader viewer compatibility
-- Larger file size
-- Use when viewer compatibility matters over efficiency
+- Columnar encoding with delta/RLE/dictionary compression
+- Smaller files for polygon/line data (about 15-20% savings on Census data)
+- Minimal benefit for point-only datasets
+- Requires MapLibre GL JS 5.21+ (mapgl supports it natively)

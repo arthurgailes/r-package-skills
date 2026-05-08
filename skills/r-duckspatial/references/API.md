@@ -1,17 +1,38 @@
 # duckspatial API Reference
 
-Complete function reference for the duckspatial package.
+Complete function reference for the duckspatial package (v1.0.0).
+
+## Common Arguments
+
+Most functions that produce a duckspatial_df share the following standardized arguments (added in v1.0.0):
+
+- `conn`: DuckDB connection. If `NULL` (default), a temporary in-memory database is used.
+- `name`: Optional table name to persist the result inside DuckDB. If `NULL`, results are returned without naming.
+- `mode`: Output type. Either `"duckspatial"` (lazy, default) or `"sf"` (eagerly collect to sf).
+- `overwrite`: If `TRUE`, replaces existing tables of the same `name`.
+- `quiet`: If `TRUE`, suppresses informational messages.
+
+These are omitted from individual signatures below where not load-bearing for the function's purpose.
 
 ## Setup and Connection
 
-### ddbs_create_conn()
-Creates a DuckDB connection with spatial extension loaded.
+**v1.0.0 workflow shift:** Most users never need to manage a connection explicitly. Functions accept `conn = NULL` (default) and use a temporary in-memory DuckDB. Pass an explicit `conn` only when you want to persist results across sessions or share state across pipelines.
+
+### ddbs_create_conn(dbdir = ":memory:", ...)
+Creates a DuckDB connection with the spatial extension loaded.
+
+**Parameters:**
+- `dbdir`: Path to a `.duckdb` file for persistent storage, or `":memory:"` (default).
 
 **Returns:** DuckDB connection object
 
 **Usage:**
 ```r
+# Ephemeral - default behavior, often unnecessary
 conn <- ddbs_create_conn()
+
+# Persistent
+conn <- ddbs_create_conn(dbdir = "project.duckdb")
 ```
 
 ### ddbs_stop_conn(conn)
@@ -118,19 +139,27 @@ Tests if object is a duckspatial_df.
 
 **Returns:** Logical
 
-### ddbs_collect(x) / collect(x)
-Materializes lazy results into R memory as sf object.
+### ddbs_collect(x, ..., as = c("sf", "tibble", "raw", "geoarrow")) / collect(x)
+Materializes a lazy duckspatial_df into R memory.
 
 **Parameters:**
 - `x`: duckspatial_df object
+- `...`: Additional arguments passed to `dplyr::collect`
+- `as`: Output format:
+  - `"sf"` (default) - sf object with `sfc` geometry
+  - `"tibble"` - tibble with geometry column dropped (fastest)
+  - `"raw"` - tibble with geometry as raw WKB bytes
+  - `"geoarrow"` - tibble with geometry as `geoarrow_vctr` (zero-copy with Arrow tooling)
 
-**Returns:** sf object
+**Returns:** Object of the requested type.
 
 **Usage:**
 ```r
-result <- lazy_data |>
-  ddbs_make_valid() |>
-  ddbs_collect()
+# Default: sf
+result <- lazy_data |> ddbs_make_valid() |> ddbs_collect()
+
+# Attributes only, fastest
+attrs <- lazy_data |> ddbs_collect(as = "tibble")
 ```
 
 ### ddbs_compute(x, ...)
@@ -150,20 +179,37 @@ Identifies the geometry column name.
 
 **Returns:** Character string
 
+### ddbs_drop_geometry(x)
+Removes the geometry column, returning a lazy tibble (dbplyr) without spatial data.
+
+**Parameters:**
+- `x`: duckspatial_df, sf, tbl_lazy, or character table name
+
+**Returns:** Lazy tibble (no geometry).
+
+**Usage:**
+```r
+attrs <- ddbs_open_dataset("countries.geojson") |>
+  ddbs_drop_geometry() |>
+  collect()
+```
+
 ## Spatial Predicates
 
 All spatial predicate functions test relationships between geometries.
 
-### ddbs_predicate(x, y, predicate, ...)
-Generic spatial relationship testing.
+### ddbs_predicate(x, y, predicate = "intersects", conn = NULL, conn_x = NULL, conn_y = NULL, name = NULL, id_x = NULL, id_y = NULL, sparse = TRUE, distance = NULL, mode = NULL, overwrite = FALSE, quiet = TRUE)
+Generic spatial relationship testing. Underlies all the predicate shortcuts (`ddbs_intersects()`, `ddbs_within()`, etc.).
 
 **Parameters:**
-- `x`: duckspatial_df object
-- `y`: duckspatial_df or sf object
-- `predicate`: Relationship type ("intersects", "contains", "within", etc.)
-- `...`: Additional parameters
+- `x`, `y`: duckspatial_df, sf objects, or table names
+- `predicate`: Relationship type. One of `"intersects"`, `"covers"`, `"covered_by"`, `"touches"`, `"disjoint"`, `"within"`, `"contains"`, `"overlaps"`, `"crosses"`, `"equals"`, `"intersects_extent"`, `"contains_properly"`, `"within_properly"`, `"dwithin"`.
+- `id_x`, `id_y`: Optional ID column names for cross-referencing.
+- `sparse`: If `TRUE` (default), returns a sparse representation (only matching pairs).
+- `distance`: Numeric distance threshold (used with `predicate = "dwithin"`).
+- Standard `conn`, `name`, `mode`, `overwrite`, `quiet` arguments apply.
 
-**Returns:** Logical vector or duckspatial_df
+**Returns:** Lazy duckspatial_df by default. With `mode = "sf"`, returns an eagerly collected list. When `name` is supplied, writes to DuckDB and returns `TRUE` invisibly.
 
 ### Predicate Functions
 All follow pattern: `ddbs_<predicate>(x, y, ...)`
@@ -211,33 +257,37 @@ Tests if geometries intersect with bounding box.
 
 ## Spatial Joins and Filters
 
-### ddbs_join(x, y, join = "inner", predicate = "intersects", ...)
-Combines geometries based on spatial relationships.
+### ddbs_join(x, y, join = "intersects", conn = NULL, conn_x = NULL, conn_y = NULL, name = NULL, distance = NULL, mode = NULL, overwrite = FALSE, quiet = FALSE)
+Combines geometries based on a spatial relationship. **The `join` argument is the spatial predicate, not a SQL join type.**
 
 **Parameters:**
-- `x`: duckspatial_df object (left)
-- `y`: duckspatial_df or sf object (right)
-- `join`: Join type ("inner", "left", "right", "full")
-- `predicate`: Spatial relationship ("intersects", "within", "contains", etc.)
-- `...`: Additional parameters
+- `x`, `y`: duckspatial_df, sf objects, or table names
+- `join`: Spatial predicate. One of `"intersects"` (default), `"within"`, `"contains"`, `"covers"`, `"covered_by"`, `"touches"`, `"overlaps"`, `"crosses"`, `"equals"`, `"disjoint"`, `"contains_properly"`, `"within_properly"`, `"intersects_extent"`, or `"dwithin"` (use with `distance`).
+- `conn_x`, `conn_y`: Per-side connections when `x` and `y` live in different DuckDB databases.
+- `distance`: Numeric distance (meters) when `join = "dwithin"`.
+- `name`, `mode`, `overwrite`, `quiet`: See Common Arguments.
 
-**Returns:** duckspatial_df with combined attributes
+**Returns:** duckspatial_df (or sf when `mode = "sf"`) with combined attributes from features satisfying the predicate.
 
 **Usage:**
 ```r
-result <- ddbs_join(points, polygons,
-                    join = "left",
-                    predicate = "within")
+# Each point gets attributes from any zone it falls within
+result <- ddbs_join(points, zones, join = "within")
+
+# Within 500m
+near <- ddbs_join(stops, schools, join = "dwithin", distance = 500)
 ```
 
+For non-spatial joins on attribute columns, use dplyr verbs (`left_join()`, `inner_join()`, etc.) directly on the lazy duckspatial_df.
+
 ### ddbs_filter(x, y, predicate = "intersects", ...)
-Subsets x to features that match spatial criteria with y.
+Subsets x to features that satisfy the predicate against y.
 
 **Parameters:**
 - `x`: duckspatial_df object
 - `y`: duckspatial_df or sf object
-- `predicate`: Spatial relationship
-- `...`: Additional parameters
+- `predicate`: Spatial relationship (same set as `ddbs_join`'s `join`). Default `"intersects"`.
+- Standard `conn`, `name`, `mode`, `overwrite`, `quiet` arguments apply.
 
 **Returns:** Filtered duckspatial_df
 
@@ -281,21 +331,36 @@ Crops x geometries to the extent of y.
 
 **Returns:** duckspatial_df cropped to y extent
 
-### ddbs_interpolate_aw(x, y, values, ...)
-Performs areal-weighted interpolation from x to y geometries.
+### ddbs_interpolate_aw(target, source, tid, sid, extensive = NULL, intensive = NULL, weight = "sum", mode = NULL, keep_NA = TRUE, na.rm = FALSE, join_crs = NULL, conn = NULL, name = NULL, overwrite = FALSE, quiet = FALSE)
+Performs areal-weighted interpolation from `source` polygons onto `target` polygons.
 
 **Parameters:**
-- `x`: duckspatial_df source polygons
-- `y`: duckspatial_df target polygons
-- `values`: Column name(s) to interpolate
-- `...`: Additional parameters (extensive vs intensive variables)
+- `target`: duckspatial_df target polygons (these receive the interpolated values).
+- `source`: duckspatial_df source polygons (carry the original values).
+- `tid`: Character. Column name in `target` that uniquely identifies each target feature.
+- `sid`: Character. Column name in `source` that uniquely identifies each source feature.
+- `extensive`: Character vector of column names whose values are counts/totals (e.g. population). Distributed proportionally to overlapping area.
+- `intensive`: Character vector of column names whose values are rates/densities (e.g. median income). Averaged using area weights.
+- `weight`: For extensive variables. `"sum"` (default) divides by sum of overlapping area; `"total"` divides by full source geometry area (strict mass preservation).
+- `keep_NA`: If `TRUE` (default), retains target features with no overlap as NA values.
+- `na.rm`: If `TRUE`, drops missing values from interpolation.
+- `join_crs`: Optional CRS (EPSG or WKT) used during area calculations. Useful when inputs are in geographic coordinates.
+- Standard `conn`, `name`, `mode`, `overwrite`, `quiet` arguments apply.
 
-**Returns:** duckspatial_df with interpolated values
+**Returns:** duckspatial_df keyed by `tid` with interpolated columns.
 
 **Usage:**
 ```r
-result <- ddbs_interpolate_aw(census_tracts, neighborhoods,
-                              values = "population")
+# Population (extensive) and median income (intensive) from census tracts to neighborhoods
+result <- ddbs_interpolate_aw(
+  target    = neighborhoods,
+  source    = census,
+  tid       = "neighborhood_id",
+  sid       = "tract_id",
+  extensive = "population",
+  intensive = "median_income"
+) |>
+  ddbs_collect()
 ```
 
 ## Data Utilities
@@ -401,19 +466,26 @@ Extracts geometry boundary (perimeter).
 
 **Returns:** duckspatial_df with boundary geometries
 
-### ddbs_buffer(x, distance, ...)
+### ddbs_buffer(x, distance, num_triangles = 8L, cap_style = "CAP_ROUND", join_style = "JOIN_ROUND", mitre_limit = 1, ...)
 Creates buffer zones around geometries.
 
 **Parameters:**
 - `x`: duckspatial_df object
 - `distance`: Buffer distance in CRS units
-- `...`: Additional parameters (num_segments, etc.)
+- `num_triangles`: Triangles per quarter circle (higher = smoother). Default `8`.
+- `cap_style`: Line ending style. `"CAP_ROUND"` (default), `"CAP_FLAT"`, or `"CAP_SQUARE"`.
+- `join_style`: Corner join style. `"JOIN_ROUND"` (default), `"JOIN_MITRE"`, or `"JOIN_BEVEL"`.
+- `mitre_limit`: Mitre length ratio (only used with `JOIN_MITRE`). Default `1`.
+- Standard `conn`, `name`, `mode`, `overwrite`, `quiet` arguments apply.
 
 **Returns:** duckspatial_df with buffered geometries
 
 **Usage:**
 ```r
 buffered <- points |> ddbs_buffer(distance = 1000)  # 1km buffer
+
+# Square caps for road buffers
+roads_buf <- roads |> ddbs_buffer(distance = 5, cap_style = "CAP_SQUARE")
 ```
 
 ### ddbs_build_area(x, ...)
@@ -470,20 +542,33 @@ Assembles polygons from linestring networks.
 
 **Returns:** duckspatial_df with polygon geometries
 
-### ddbs_union(x, ...) / ddbs_union_agg(x, ...)
-Dissolves geometries into single multipolygon or geometry collection.
+### ddbs_union(x, y, ...)
+Pairwise (per-row) union of two geometry sets. Combines `x` and `y` geometries row-by-row into single geometries.
+
+**Parameters:**
+- `x`, `y`: duckspatial_df objects
+- Standard `conn`, `name`, `mode`, `overwrite`, `quiet` arguments apply.
+
+### ddbs_union_agg(x, ...)
+Aggregate union (dissolve). Collapses all features in `x` into a single geometry.
 
 **Parameters:**
 - `x`: duckspatial_df object
-- `...`: Additional parameters
+- Standard `conn`, `name`, `mode`, `overwrite`, `quiet` arguments apply.
 
-**Returns:** duckspatial_df with dissolved geometries
+**Returns:** duckspatial_df with one row containing the dissolved geometry.
 
 **Usage:**
 ```r
+# Dissolve all polygons into a single multipolygon
 dissolved <- polygons |>
   ddbs_make_valid() |>
-  ddbs_union()
+  ddbs_union_agg()
+
+# Dissolve by group (e.g., by region) using dplyr
+by_region <- polygons |>
+  group_by(region) |>
+  summarise(geom = ddbs_union_agg(geom))
 ```
 
 ### ddbs_combine(x, ...)
@@ -643,19 +728,23 @@ Removes consecutive duplicate vertices from geometries.
 
 **Returns:** duckspatial_df with deduplicated vertices
 
-### ddbs_simplify(x, tolerance, ...)
-Reduces geometry complexity using Douglas-Peucker algorithm.
+### ddbs_simplify(x, tolerance = 0, preserve_topology = FALSE, ...)
+Reduces geometry complexity.
 
 **Parameters:**
 - `x`: duckspatial_df object
-- `tolerance`: Simplification tolerance in CRS units
-- `...`: Additional parameters
+- `tolerance`: Simplification tolerance in CRS units. Default `0` (no-op).
+- `preserve_topology`: If `FALSE` (default), uses Douglas-Peucker (faster, may produce invalid geometries). If `TRUE`, uses topology-preserving simplification (slower but output remains valid).
+- Standard `conn`, `name`, `mode`, `overwrite`, `quiet` arguments apply.
 
 **Returns:** duckspatial_df with simplified geometries
 
 **Usage:**
 ```r
 simplified <- polygons |> ddbs_simplify(tolerance = 100)
+
+# Safe simplification for self-touching geometries
+simplified <- polygons |> ddbs_simplify(tolerance = 100, preserve_topology = TRUE)
 ```
 
 ### Validation Check Functions

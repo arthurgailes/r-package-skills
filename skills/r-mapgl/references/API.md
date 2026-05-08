@@ -33,7 +33,7 @@ Add a `*_view`-style auto-styled layer onto an existing map.
 
 All layers share these arguments (listed once here, not repeated per function):
 
-- `map`, `id` (unique string), `source` (source id string, sf object, or a `list(type=..., data=...)`).
+- `map`, `id` (unique string), `source` (source id string, sf object, sfc geometry vector, or a `list(type=..., data=...)`). As of 0.4.6, raw `sfc` vectors work in any layer/quickview/`bounds` slot -- wrapping with `st_sf()` is no longer needed.
 - `source_layer`: required for vector tile / PMTiles sources.
 - `popup`, `tooltip`: column name to render on click / hover.
 - `hover_options`: named list of paint-property overrides when feature is hovered.
@@ -53,7 +53,7 @@ Paint args: `fill_color`, `fill_opacity`, `fill_outline_color`, `fill_antialias=
 
 ### `add_circle_layer()`
 
-`circle_color`, `circle_radius`, `circle_opacity`, `circle_blur`, `circle_emissive_strength`, `circle_pitch_alignment`, `circle_pitch_scale`, `circle_sort_key`, `circle_stroke_color`, `circle_stroke_opacity`, `circle_stroke_width`, `circle_translate`, `circle_translate_anchor="map"`, `cluster_options` (from `cluster_options()`).
+`circle_color`, `circle_radius`, `circle_opacity`, `circle_blur`, `circle_emissive_strength` (3D lighting), `circle_pitch_alignment`, `circle_pitch_scale`, `circle_sort_key`, `circle_stroke_color`, `circle_stroke_opacity`, `circle_stroke_width`, `circle_translate`, `circle_translate_anchor="map"`, `cluster_options` (from `cluster_options()`).
 
 ### `add_heatmap_layer()`
 
@@ -95,7 +95,7 @@ DEM source for `set_terrain()`.
 
 ### `add_image_source(map, id, url=NULL, data=NULL, coordinates=NULL, colors=NULL)`
 
-Single image or terra `SpatRaster`/`RasterLayer`. `coordinates`: list of four `c(lng, lat)` in clockwise order starting top-left; auto-extracted for raster data.
+Single image or terra `SpatRaster`/`RasterLayer`. `coordinates`: list of four `c(lng, lat)` in clockwise order starting top-left; auto-extracted for raster data. `colors`: vector of colors used as a color table for categorical rasters (added in 0.4.6).
 
 ### `add_video_source(map, id, urls, coordinates)`
 
@@ -103,7 +103,7 @@ Looping video at fixed coordinates.
 
 ### `add_pmtiles_source(map, id, url, source_type="vector", maxzoom=22, tilesize=256, promote_id=NULL, ...)`
 
-PMTiles archive (protomaps). `source_type="raster"` for raster PMTiles (MapLibre only).
+PMTiles archive (protomaps). `source_type="raster"` for raster PMTiles (MapLibre only). MapLibre Tiles (MLT) format is also supported inside PMTiles. As of mapgl 0.4.6 / Mapbox GL JS v3.21, PMTiles works natively on Mapbox without a JS shim.
 
 ### `add_h3j_source(map, id, url)`
 
@@ -125,11 +125,21 @@ Geolocation (fit to user).
 
 `layers` may be a character vector of IDs, a named list `list("Label" = "id")`, or a nested list for grouping.
 
-### `add_draw_control(map, position="top-left", freehand=FALSE, simplify_freehand=FALSE, rectangle=FALSE, radius=FALSE, orientation="vertical", source=NULL, point_color="#3bb2d0", line_color="#3bb2d0", fill_color="#3bb2d0", fill_opacity=0.1, active_color="#fbb03b", vertex_radius=5, line_width=2, download_button=FALSE, download_filename="drawn-features", show_measurements=FALSE, measurement_units="metric"|"imperial"|"both", ...)`
+### `add_draw_control(map, position="top-left", freehand=FALSE, simplify_freehand=FALSE, rectangle=FALSE, radius=FALSE, bezier=FALSE, bezier_polygon=FALSE, orientation="vertical", source=NULL, attributes=NULL, point_color="#3bb2d0", line_color="#3bb2d0", fill_color="#3bb2d0", fill_opacity=0.1, active_color="#fbb03b", vertex_radius=5, line_width=2, download_button=FALSE, download_filename="drawn-features", show_measurements=FALSE, measurement_units="both", ...)`
 
-Drawn features land in `input$<mapId>_drawn_features`.
+Drawing modes: free-form (default), `freehand`, `rectangle`, `radius` (circle), `bezier` (curved line), `bezier_polygon` (curved polygon). Drawn features land in `input$<mapId>_drawn_features`.
 
-### `add_geocoder_control(map, position="top-right", placeholder="Search", collapsed=FALSE, ...)`
+`attributes`: optional named list of `draw_attribute()` field definitions to attach editable properties to drawn features. Keys become property names, values are `draw_attribute()` configs.
+
+### `draw_attribute(type=NULL, label=NULL, choices=NULL, default=NULL, required=FALSE, placeholder=NULL, min=NULL, max=NULL, step=NULL)`
+
+Helper that builds one field definition for `add_draw_control(attributes=...)`. `type` accepts `"text"`, `"textarea"`, `"select"`, `"number"`, `"checkbox"` (aliases `"numeric"`, `"logical"`); inferred from defaults if `NULL`. `choices` is a vector or named list (names display as labels) for `"select"` fields. `min`/`max`/`step` only apply to numeric fields.
+
+### `add_geocoder_control(map, position="top-right", placeholder="Search", collapsed=FALSE, provider="osm"|"maptiler", maptiler_api_key=NULL, ...)`
+
+### `add_coordinates_control(map, position="bottom-right", format=c("decimal","dms"), precision=NULL, label=NULL, empty_text="Move cursor over map", wrap=TRUE)`
+
+Compact readout of cursor position (lng/lat in WGS84). `precision` defaults to 5 for decimal, 1 for DMS seconds.
 
 ### `add_reset_control()`, `add_globe_control()`, `add_screenshot_control()`, `add_control(map, html, position)`
 
@@ -163,9 +173,13 @@ Styling payload for `add_legend(style=...)`.
 
 ## Static export
 
-### `save_map(map, filename, width=800, height=600, ...)` / `print_map(map, width=800, height=600, ...)`
+### `save_map(map, filename="map.png", width=900, height=500, include_legend=TRUE, hide_controls=TRUE, include_scale_bar=TRUE, basemap_color=NULL, image_scale=1, background="white", delay=NULL)`
 
-Render widget to PNG via chromote. Requires the `chromote` and `webshot2` ecosystems.
+Render widget to PNG via headless Chrome (`chromote`). Captures legends, attribution, optional scale bar. `delay` (seconds) lets tiles load before snapshotting.
+
+### `print_map(map, ...)`
+
+In-session preview wrapper around `save_map()`; opens PNG in the RStudio viewer. Same render args.
 
 ## Style helpers
 
@@ -311,9 +325,9 @@ Proxy for mutation. Use inside `observeEvent()` / `observe()`. Most `set_*`, `ad
 
 Non-Shiny compare widget.
 
-### `enable_shiny_hover(map)`
+### `enable_shiny_hover(map, coordinates=TRUE, features=TRUE, layer_id=NULL)`
 
-Enable hover-related reactive inputs (`input$<mapId>_feature_hover`).
+Enable hover-related reactive inputs. `coordinates=TRUE` exposes `input$<mapId>_hover` (cursor lng/lat); `features=TRUE` exposes `input$<mapId>_feature_hover` (feature under cursor). Pass a layer id (or vector) to `layer_id` to restrict feature hover to specific layers.
 
 ### Auto-exposed Shiny inputs
 

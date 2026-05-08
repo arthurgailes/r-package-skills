@@ -84,8 +84,8 @@ All take `map, id, source, source_layer` (opt, for vector/PMTiles), `popup` (opt
 ### Camera, controls, legends
 
 - Camera: `fit_bounds(map, bbox, animate=FALSE)`, `fly_to(map, center, zoom)`, `ease_to()`, `jump_to()`, `set_view()`.
-- Controls: `add_navigation_control()`, `add_fullscreen_control()`, `add_scale_control()`, `add_geolocate_control()`, `add_layers_control(layers=NULL, collapsible=TRUE)`, `add_draw_control(rectangle=FALSE, show_measurements=FALSE)`, `add_geocoder_control()`.
-- Legends: `add_legend(legend_title, values, colors, type=c("continuous","categorical"), patch_shape="square", position="top-left", add=FALSE, layer_id=NULL, interactive=FALSE)`. Also `add_categorical_legend()`, `add_continuous_legend()`, `clear_legend()`.
+- Controls: `add_navigation_control()`, `add_fullscreen_control()`, `add_scale_control()`, `add_geolocate_control()`, `add_globe_control()`, `add_layers_control(layers=NULL, collapsible=TRUE)`, `add_draw_control(rectangle=FALSE, radius=FALSE, bezier=FALSE, attributes=NULL, show_measurements=FALSE)`, `add_geocoder_control(provider="osm"|"maptiler")`, `add_coordinates_control(format="decimal"|"dms")`, `add_screenshot_control()`, `add_reset_control()`.
+- Legends: `add_legend(legend_title, values, colors, type=c("continuous","categorical"), patch_shape="square", position="top-left", add=FALSE, layer_id=NULL, interactive=FALSE, draggable=FALSE)`. Also `add_categorical_legend()`, `add_continuous_legend()`, `clear_legend()`. Interactive legends filter their layer on click (categorical) or via drag handles (continuous).
 
 ### Shiny
 
@@ -97,8 +97,12 @@ All take `map, id, source, source_layer` (opt, for vector/PMTiles), `popup` (opt
 
 ### Story maps & turf.js
 
-- Story: `story_map()` / `story_maplibre()` UI + `story_section(title, content, position="left")` + server `on_section(map_id, section_id, expr)`.
+- Story: `story_map()` / `story_maplibre()` / `story_leaflet()` UI + `story_section(title, content, position="left")` + server `on_section(map_id, section_id, expr)`.
 - Client-side spatial: `turf_buffer()`, `turf_filter(predicate="intersects"|"within"|"contains"|"crosses"|"disjoint")`, `turf_intersect()`, `turf_union()`, `turf_difference()`, `turf_convex_hull()`, `turf_concave_hull()`, `turf_voronoi()`, `turf_centroid()`.
+
+### Static export
+
+- `save_map(map, filename, width=900, height=500, include_legend=TRUE, hide_controls=TRUE, include_scale_bar=TRUE, image_scale=1, delay=NULL)` renders a PNG via headless Chrome (needs `chromote`). Use `delay` (seconds) to let tiles finish loading. `print_map()` previews in the RStudio viewer.
 
 ## Quick Start
 
@@ -145,6 +149,8 @@ server <- function(input, output, session) {
 
 ## PMTiles pattern (large data)
 
+PMTiles is supported on both `maplibre()` and `mapboxgl()` (native in Mapbox GL JS v3.21+, no JS shim required).
+
 ```r
 maplibre() |>
   add_pmtiles_source(id = "src", url = "https://example.com/data.pmtiles") |>
@@ -165,6 +171,8 @@ maplibre() |>
 | Fill-extrusion + globe projection | Set `projection = "mercator"`. |
 | `mapboxgl()` with no token | Use `maplibre()` for token-free maps. |
 | `circular_patches = TRUE` | Deprecated; use `patch_shape = "circle"`. |
+| Wrapping `sfc` in `st_sf()` just to plot | As of 0.4.6, `add_*_layer()`, `*_view()`, and `bounds=` accept raw `sfc` vectors. |
+| Forgetting `delay` in `save_map()` for remote tiles | Pass `delay = 2` (or higher) so tiles finish loading before the snapshot. |
 
 ## Resources
 
