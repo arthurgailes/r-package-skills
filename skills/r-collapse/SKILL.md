@@ -52,15 +52,18 @@ Read `references/API.md` before writing code.
 
 ## Quick Reference
 
-| Task              | Function/Example                          |
-| ----------------- | ----------------------------------------- |
-| **Grouped stats** | `fmean()`, `fsum()`, `fsd()`, `fmedian()` |
-| **Aggregation**   | `collap(df, ~ by, list(fmean, fsd))`      |
-| **Transform**     | `ftransform()`, `fmutate()`               |
-| **Selection**     | `fselect()`, `fsubset()` (~100x faster)   |
-| **Time series**   | `flag()`, `fdiff()`, `fgrowth()`          |
-| **Panel data**    | `fwithin()`, `fbetween()`, `qsu()`        |
-| **Grouping**      | `fgroup_by()`, `GRP()`                    |
+| Task              | Function/Example                                    |
+| ----------------- | --------------------------------------------------- |
+| **Grouped stats** | `fmean()`, `fsum()`, `fsd()`, `fmedian()`           |
+| **Aggregation**   | `collap(df, ~ by, list(fmean, fsd))`                |
+| **Transform**     | `ftransform()`, `fmutate()`, `fcompute()`           |
+| **Selection**     | `fselect()`, `fsubset()`, `fslice()` (~100x faster) |
+| **Reshape/join**  | `pivot()`, `join()`, `rowbind()`                    |
+| **Time series**   | `flag()`, `fdiff()`, `fgrowth()`, `fcumsum()`       |
+| **Panel data**    | `fwithin()`, `fbetween()`, `findex_by()`, `qsu()`   |
+| **Grouping**      | `fgroup_by()`, `GRP()`, `fcount()`                  |
+| **Recode/NA**     | `replace_na()`, `na_locf()`, `recode_num()`         |
+| **Options**       | `set_collapse(nthreads, mask, na.rm)`               |
 
 ## Core Pattern
 
@@ -81,6 +84,11 @@ data |> fgroup_by(id) |> fmean(TRA = "-")    # Demean: subtract group mean
 data |> fgroup_by(id) |> fsd(TRA = "/")      # Scale: divide by group SD
 data |> fgroup_by(id) |> fmean(TRA = "fill") # Fill: replace NA with group mean
 # See references/API.md for full TRA options ("-", "/", "fill", "-+", "replace")
+
+# Drop f-prefixes (optional, vignette-recommended for tidyverse users)
+set_collapse(mask = "manip", nthreads = 4)
+# now select(), group_by(), summarise(), mutate(), rename(), slice(), count()
+# resolve to collapse versions
 ```
 
 ## Common Mistakes
@@ -93,6 +101,9 @@ data |> fgroup_by(id) |> fmean(TRA = "fill") # Fill: replace NA with group mean
 | `fwithin()`/`fbetween()` collapse rows     | They return same # rows (centered/group means)           |
 | Global options affect behavior             | Set arguments explicitly in package code                 |
 | Ignoring `sort = FALSE` speedup            | Add `sort = FALSE` when order doesn't matter (3x faster) |
+| Filtering on grouped data                  | Subset before `fgroup_by()`; collapse discourages it     |
+| Re-creating intermediate copies in mutate  | Use `set = TRUE` or `%/=%`/`%+=%` for in-place updates   |
+| Confusing `fnobs()` with old `fNobs()`     | All v2.x functions are lowercase: `fnobs`, `fndistinct` |
 
 ## Advanced
 
@@ -100,4 +111,4 @@ See `references/` for API reference, vignette content (tidyverse comparison, sf 
 
 **Validator:** `lib/r-validators/numerical-validator.R`
 
-**Resources:** [Docs](https://sebkrantz.github.io/collapse/)
+**Resources:** [Docs](https://fastverse.org/collapse/)

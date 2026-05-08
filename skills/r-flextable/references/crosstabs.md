@@ -31,6 +31,20 @@ proc_freq(mtcars, "gear", "vs") |>
   autofit()
 ```
 
+### Custom Count Formatting (>= 0.9.9)
+
+`proc_freq()` accepts `count_format_fun` to control how integer counts render
+(e.g. thousands separator):
+
+```r
+proc_freq(
+  large_df,
+  row = "region",
+  col = "status",
+  count_format_fun = function(x) format(x, big.mark = ",")
+)
+```
+
 ## 2. tables Package Integration
 
 Use the `tables` package for complex tabulations, then convert to flextable.

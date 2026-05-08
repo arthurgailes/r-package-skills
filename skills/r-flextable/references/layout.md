@@ -285,7 +285,20 @@ ft |> footnote(
   value = as_paragraph(c("Note A", "Note B", "Note C")),
   ref_symbols = c("a", "b", "c")
 )
+
+# Several symbols on one cell (flextable >= 0.9.11): symbol_sep
+# controls how multiple ref symbols are joined when they collide
+ft |> footnote(
+  i = c(1, 1), j = c(2, 2),
+  value = as_paragraph(c("Note A", "Note B")),
+  ref_symbols = c("a", "b"),
+  symbol_sep = ","
+)
 ```
+
+Notes:
+- An empty `ref_symbols` value (`""`) is not allowed (defunct since 0.9.9).
+  Use `add_footer_lines()` for unmarked notes.
 
 ### Superscript in Headers
 ```r

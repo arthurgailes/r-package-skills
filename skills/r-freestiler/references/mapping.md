@@ -89,15 +89,15 @@ maplibre(
 
 ### Key Components
 
-**`add_pmtiles_source()`** — Registers the PMTiles file as a vector tile source. The `promote_id` parameter specifies which property serves as the feature identifier, enabling hover and click interactions.
+**`add_pmtiles_source()`** - Registers the PMTiles file as a vector tile source. The `promote_id` parameter specifies which property serves as the feature identifier, enabling hover and click interactions.
 
-**`source_layer`** — Must correspond to the `layer_name` parameter used during tileset creation.
+**`source_layer`** - Must correspond to the `layer_name` parameter used during tileset creation.
 
-**`interpolate()`** — Generates data-driven color ramps evaluated per-feature on the GPU, maintaining performance across large feature counts.
+**`interpolate()`** - Generates data-driven color ramps evaluated per-feature on the GPU, maintaining performance across large feature counts.
 
-**`hover_options`** — Implements mouseover highlighting (requires `promote_id` configuration).
+**`hover_options`** - Implements mouseover highlighting (requires `promote_id` configuration).
 
-**`tooltip`** — Uses `concat()` and `number_format()` to construct formatted hover text from feature properties.
+**`tooltip`** - Uses `concat()` and `number_format()` to construct formatted hover text from feature properties.
 
 ## Line and Point Layers
 
@@ -165,12 +165,16 @@ maplibre() |>
 
 ## Tile Format Options
 
-By default, freestiler uses MapLibre Tiles (MLT) for reduced file sizes. Both `view_tiles()` and mapgl support MLT natively with current MapLibre GL JS versions. For broader compatibility with external tools, specify the MVT format:
+By default, freestiler emits Mapbox Vector Tiles (MVT) for maximum compatibility across MapLibre GL JS, Mapbox GL JS (3.21+), deck.gl, and other clients. Both `view_tiles()` and mapgl also support the alternative MapLibre Tiles (MLT) format, which yields smaller files for polygon and line data when targeting MapLibre GL JS 5.21+:
 
 ```r
-freestile(bgs, "us_income_mvt.pmtiles",
+# Default MVT - explicit argument is unnecessary
+freestile(bgs, "us_income.pmtiles", layer_name = "income")
+
+# Opt in to MLT for smaller polygon files (mapgl/MapLibre GL JS 5.21+ only)
+freestile(bgs, "us_income_mlt.pmtiles",
   layer_name = "income",
-  tile_format = "mvt"
+  tile_format = "mlt"
 )
 ```
 

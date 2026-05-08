@@ -30,10 +30,13 @@ Read `references/API.md` before writing code.
 - Cross-references and auto-numbered captions
 - Same table across multiple formats
 
-**Consider alternatives:**
-- HTML-only: gt or reactable
-- LaTeX-heavy: kableExtra
-- Interactive dashboards: DT
+## When NOT to Use
+
+- HTML-only output: prefer `gt` or `reactable`
+- LaTeX-heavy / academic PDF tables: prefer `kableExtra`
+- Interactive dashboards (sortable, filterable in browser): prefer `DT` or `reactable`
+- Aggregation or reshaping: flextable does not aggregate -- pre-aggregate
+  with `dplyr` / `collapse` / `tabulator()` / `proc_freq()` first
 
 ## Quick Reference
 
@@ -42,11 +45,14 @@ Read `references/API.md` before writing code.
 | Create table | `flextable(df)` |
 | Format numbers | `colformat_double()`, `colformat_int()` |
 | Bold/italic/color | `bold()`, `italic()`, `color()` |
+| Strikethrough chunk | `as_strike()` |
 | Background color | `bg()` |
 | Merge cells | `merge_v()`, `merge_h()`, `merge_at()` |
 | Add header | `add_header_row()` |
 | Auto-size | `autofit()` |
-| Apply theme | `theme_vanilla()`, `theme_zebra()` |
+| Apply theme | `theme_vanilla()`, `theme_zebra()`, `theme_borderless()` |
+| Quarto-rich cell content | `as_qmd()` + `use_flextable_qmd()` |
+| Combine with ggplot2 | `wrap_flextable()` (patchwork) |
 | Save to Word | `save_as_docx()` |
 | Save to PowerPoint | `save_as_pptx()` |
 
@@ -100,6 +106,9 @@ See `references/selectors.md` for details on multi-content cells, mini charts, o
 | Images missing in Word | Use `officedown::rdocx_document()` |
 | PDF ignores padding | Use `ft.tabcolsep` chunk option |
 | `add_header_row` values wrong | One value per span; colwidths sum to ncol |
+| Header repeats on every Word page | `set_table_properties(opts_word = list(repeat_headers = FALSE))` (>= 0.9.10) |
+| Empty footnote symbol `""` errors | Use `add_footer_lines()` instead (defunct since 0.9.9) |
+| `lollipop()`, `as_raster()`, `set_formatter_type()` error | Defunct since 0.9.9 -- use `linerange()`/`minibar()`, `gen_grob()`, `colformat_*()` |
 
 ## Advanced
 

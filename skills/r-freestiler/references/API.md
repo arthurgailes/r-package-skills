@@ -15,7 +15,7 @@ freestile(
   input,
   output,
   layer_name = NULL,
-  tile_format = "mlt",
+  tile_format = "mvt",
   min_zoom = 0L,
   max_zoom = 14L,
   base_zoom = NULL,
@@ -48,11 +48,11 @@ freestile(
 
 **tile_format**
 
-- Encoding choice: `"mlt"` (default) or `"mvt"`
+- Encoding choice: `"mvt"` (default, broadest compatibility) or `"mlt"` (smaller files for polygon/line data; requires MapLibre GL JS 5.21+)
 
 **min_zoom** / **max_zoom**
 
-- Zoom level boundaries (default 0–14)
+- Zoom level boundaries (default 0-14)
 
 **base_zoom**
 
@@ -134,7 +134,7 @@ freestile_file(
   input,
   output,
   layer_name = NULL,
-  tile_format = "mlt",
+  tile_format = "mvt",
   min_zoom = 0L,
   max_zoom = 14L,
   base_zoom = NULL,
@@ -167,7 +167,7 @@ freestile_file(
 
 **tile_format**
 
-- Output format: `"mlt"` (default) or `"mvt"`
+- Output format: `"mvt"` (default) or `"mlt"`
 
 **min_zoom** / **max_zoom**
 
@@ -238,7 +238,7 @@ freestile_query(
   output,
   db_path = NULL,
   layer_name = NULL,
-  tile_format = "mlt",
+  tile_format = "mvt",
   min_zoom = 0L,
   max_zoom = 14L,
   base_zoom = NULL,
@@ -277,11 +277,11 @@ freestile_query(
 
 **tile_format**
 
-- Output format: `"mlt"` (default) or `"mvt"`
+- Output format: `"mvt"` (default) or `"mlt"`
 
 **min_zoom** / **max_zoom**
 
-- Zoom level boundaries (default 0–14)
+- Zoom level boundaries (default 0-14)
 
 **base_zoom**
 

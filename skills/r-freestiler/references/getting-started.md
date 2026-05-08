@@ -5,8 +5,8 @@
 freestiler is a vector tile engine for R and Python that transforms spatial data into PMTiles archives. As described in the documentation, it "creates PMTiles archives from spatial data" with a Rust-based engine that requires no additional installation.
 
 The tool supports two tile formats:
-- **MapLibre Tiles (MLT)** - the default columnar format
-- **Mapbox Vector Tiles (MVT)** - the widely-supported protobuf alternative
+- **Mapbox Vector Tiles (MVT)** - the default; widely-supported protobuf format that works with MapLibre GL JS, Mapbox GL JS (3.21+), deck.gl, and most other clients
+- **MapLibre Tiles (MLT)** - opt-in columnar format with smaller files for polygon/line data; requires MapLibre GL JS 5.21+ or mapgl
 
 ## Installation
 
@@ -68,11 +68,14 @@ For advanced customization, use `serve_tiles()` alongside the mapgl library for 
 Choose between formats based on your needs:
 
 ```r
-# Use MVT for maximum compatibility
-freestile(nc, "nc_mvt.pmtiles", layer_name = "counties", tile_format = "mvt")
+# MVT is the default - no tile_format argument needed for broad compatibility
+freestile(nc, "nc_mvt.pmtiles", layer_name = "counties")
+
+# Switch to MLT for smaller polygon/line files (mapgl + MapLibre GL JS 5.21+)
+freestile(nc, "nc_mlt.pmtiles", layer_name = "counties", tile_format = "mlt")
 ```
 
-MLT typically produces smaller files for polygon-heavy datasets.
+MLT typically produces smaller files for polygon-heavy datasets (about 15-20% savings on real-world Census data); point-only datasets see minimal benefit. See `maplibre-tiles.md` for ecosystem details.
 
 ## Zoom Level Control
 

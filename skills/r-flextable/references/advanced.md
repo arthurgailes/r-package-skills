@@ -186,17 +186,6 @@ flextable(dat) |>
   )
 ```
 
-### lollipop() - Lollipop Charts
-```r
-flextable(dat) |>
-  mk_par(
-    j = "value",
-    value = as_paragraph(
-      lollipop(value, max = 100, barcol = "steelblue", height = 0.2)
-    )
-  )
-```
-
 ### plot_chunk() - Base R Plots
 ```r
 # Create plot functions

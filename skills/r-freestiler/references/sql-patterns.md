@@ -65,10 +65,11 @@ freestile_query(
 # Use freestile() with freestile_layer() when:
 # - Multiple datasets at different zoom levels
 # - Hierarchical display (states -> counties -> blocks)
+# Note: layer names come from named-list keys, not freestile_layer() args.
 freestile(
   input = list(
-    freestile_layer(states, "states", 0, 6),
-    freestile_layer(counties, "counties", 4, 10)
+    states   = freestile_layer(states,   min_zoom = 0, max_zoom = 6),
+    counties = freestile_layer(counties, min_zoom = 4, max_zoom = 10)
   ),
   output = "multi.pmtiles"
 )
